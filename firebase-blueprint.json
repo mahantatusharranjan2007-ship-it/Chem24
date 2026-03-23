@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "ClassGroup": {
+      "title": "ClassGroup",
+      "description": "A graduating class year.",
+      "type": "object",
+      "properties": {
+        "year": { "type": "number", "description": "The graduation year (e.g., 2024)." },
+        "title": { "type": "string", "description": "The title of the class (e.g., 'Class of 2024')." },
+        "createdAt": { "type": "number", "description": "Timestamp when the class was created." }
+      },
+      "required": ["year", "title", "createdAt"]
+    },
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "A student's profile data.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "The student's ID from data.ts." },
+        "name": { "type": "string", "description": "The student's full name." },
+        "username": { "type": "string", "description": "The student's username." },
+        "rollNumber": { "type": "string", "description": "The student's roll number." },
+        "bio": { "type": "string", "description": "The student's bio." },
+        "imageUrl": { "type": "string", "description": "The student's profile picture URL." },
+        "graduationYear": { "type": "number", "description": "The year the student graduates." },
+        "ownerUid": { "type": "string", "description": "The UID of the user who claimed this profile." }
+      },
+      "required": ["id", "name", "username", "rollNumber", "graduationYear", "ownerUid"]
+    },
+    "Photo": {
+      "title": "Photo",
+      "description": "A photo uploaded by a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The photo's unique ID." },
+        "studentId": { "type": "number", "description": "The ID of the student who uploaded the photo." },
+        "imageUrl": { "type": "string", "description": "The URL of the photo (base64 or storage URL)." },
+        "createdAt": { "type": "number", "description": "The timestamp when the photo was uploaded." },
+        "ownerUid": { "type": "string", "description": "The UID of the user who uploaded this photo." }
+      },
+      "required": ["id", "studentId", "imageUrl", "createdAt", "ownerUid"]
+    }
+  },
+  "firestore": {
+    "/classes/{year}": {
+      "schema": { "$ref": "#/entities/ClassGroup" },
+      "description": "Graduating classes."
+    },
+    "/profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/StudentProfile" },
+      "description": "Student profiles."
+    },
+    "/photos/{photoId}": {
+      "schema": { "$ref": "#/entities/Photo" },
+      "description": "Photos uploaded by students."
+    }
+  }
+}

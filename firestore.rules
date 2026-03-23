@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: profiles
+    // Document ID: {profileId} (stringified student ID)
+    // Fields:
+    //   - id: number (required)
+    //   - name: string (required, max 100 chars)
+    //   - username: string (required, max 50 chars)
+    //   - rollNumber: string (required, max 50 chars)
+    //   - bio: string (optional, max 500 chars)
+    //   - imageUrl: string (optional, max 1000000 chars - base64)
+    //   - graduationYear: number (required)
+    //   - ownerUid: string (required, immutable)
+    //
+    // Collection: classes
+    // Document ID: {year}
+    // Fields:
+    //   - year: number (required)
+    //   - title: string (required, max 100 chars)
+    //   - createdAt: number (required)
+    //
+    // Collection: photos
+    // Document ID: {photoId}
+    // Fields:
+    //   - id: string (required)
+    //   - studentId: number (required)
+    //   - imageUrl: string (required, max 1000000 chars - base64)
+    //   - createdAt: number (required)
+    //   - ownerUid: string (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerUid;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == request.resource.data.ownerUid;
+    }
+
+    function uidUnchanged() {
+      return !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == resource.data.ownerUid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidProfile() {
+      return hasRequiredFields(['id', 'name', 'username', 'rollNumber', 'graduationYear', 'ownerUid']) &&
+             request.resource.data.id is number &&
+             validStringLength('name', 1, 100) &&
+             validStringLength('username', 1, 50) &&
+             validStringLength('rollNumber', 1, 50) &&
+             isValidOptionalString('bio', 0, 500) &&
+             isValidOptionalString('imageUrl', 0, 5000000) &&
+             request.resource.data.graduationYear is number &&
+             request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function isValidClass() {
+      return hasRequiredFields(['year', 'title', 'createdAt']) &&
+             request.resource.data.year is number &&
+             validStringLength('title', 1, 100) &&
+             isValidOptionalString('imageUrl', 0, 5000000) &&
+             request.resource.data.createdAt is number;
+    }
+
+    function isValidPhoto() {
+      return hasRequiredFields(['id', 'studentId', 'imageUrl', 'createdAt', 'ownerUid']) &&
+             request.resource.data.id is string &&
+             request.resource.data.studentId is number &&
+             validStringLength('imageUrl', 1, 1000000) &&
+             request.resource.data.createdAt is number &&
+             request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /classes/{year} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidClass();
+      allow update: if isAuthenticated() && isValidClass();
+      allow delete: if false;
+    }
+
+    match /profiles/{profileId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidProfile() && uidUnchanged();
+      allow update: if isOwner() && isValidProfile() && uidNotModified();
+      allow delete: if isOwner();
+    }
+
+    match /photos/{photoId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidPhoto() && uidUnchanged();
+      allow update: if isOwner() && isValidPhoto() && uidNotModified();
+      allow delete: if isOwner();
+    }
+  }
+}
