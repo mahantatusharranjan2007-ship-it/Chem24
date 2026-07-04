@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="100%" stop-color="#312e81" />
+    </linearGradient>
+    
+    <!-- Erlenmeyer Liquid Gradient -->
+    <linearGradient id="liquidGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+
+    <!-- Glow/Shadow filters -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Card -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+
+  <!-- Outer Atomic Ring -->
+  <ellipse cx="256" cy="270" rx="170" ry="70" fill="none" stroke="#4f46e5" stroke-width="6" stroke-dasharray="10 15" transform="rotate(-30 256 270)" opacity="0.6" />
+  <ellipse cx="256" cy="270" rx="170" ry="70" fill="none" stroke="#60a5fa" stroke-width="6" stroke-dasharray="8 12" transform="rotate(30 256 270)" opacity="0.6" />
+
+  <!-- Orbiting Electrons -->
+  <circle cx="110" cy="180" r="10" fill="#60a5fa" filter="url(#glow)" />
+  <circle cx="400" cy="180" r="12" fill="#818cf8" filter="url(#glow)" />
+  <circle cx="210" cy="380" r="8" fill="#34d399" filter="url(#glow)" />
+
+  <!-- Erlenmeyer Flask Outline -->
+  <path d="M 230 110 
+           L 282 110 
+           L 282 160 
+           L 370 330 
+           A 30 30 0 0 1 344 375 
+           L 168 375 
+           A 30 30 0 0 1 142 330 
+           L 230 160 Z" 
+        fill="none" 
+        stroke="#ffffff" 
+        stroke-width="12" 
+        stroke-linejoin="round" 
+        stroke-linecap="round" />
+
+  <!-- Flask Lip -->
+  <line x1="216" y1="110" x2="296" y2="110" stroke="#ffffff" stroke-width="12" stroke-linecap="round" />
+
+  <!-- Liquid inside Flask -->
+  <path d="M 183 240 
+           L 329 240 
+           L 353 290 
+           A 18 18 0 0 1 338 315
+           L 174 315 
+           A 18 18 0 0 1 159 290 Z" 
+        fill="url(#liquidGrad)" 
+        opacity="0.85" />
+
+  <!-- Floating Bubbles from flask -->
+  <circle cx="236" cy="210" r="12" fill="#60a5fa" opacity="0.7" />
+  <circle cx="276" cy="184" r="18" fill="#93c5fd" opacity="0.6" />
+  <circle cx="246" cy="140" r="8" fill="#ffffff" opacity="0.9" filter="url(#glow)" />
+  <circle cx="266" cy="80" r="14" fill="#34d399" opacity="0.8" filter="url(#glow)" />
+  <circle cx="230" cy="50" r="10" fill="#60a5fa" opacity="0.9" filter="url(#glow)" />
+
+  <!-- Abstract Chemistry Font Accent -->
+  <text x="256" y="445" 
+        font-family="'Inter', 'Space Grotesk', system-ui, sans-serif" 
+        font-size="32" 
+        font-weight="800" 
+        letter-spacing="4" 
+        fill="#ffffff" 
+        text-anchor="middle" 
+        opacity="0.9">OG CHEMISTRY</text>
+</svg>

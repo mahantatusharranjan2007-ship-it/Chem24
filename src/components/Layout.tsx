@@ -1,9 +1,14 @@
 import { Outlet, Link } from 'react-router-dom';
-import { LogIn, LogOut } from 'lucide-react';
+import { LogIn, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { DEVELOPER_EMAILS } from '../constants';
 
 export default function Layout() {
   const { user, login, logout } = useAuth();
+  const { isEditingDisabled, toggleEditProfile } = useSettings();
+
+  const isDeveloper = DEVELOPER_EMAILS.includes(user?.email || '');
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
@@ -15,14 +20,23 @@ export default function Layout() {
                 src="https://dduniversity.ac.in/wp-content/uploads/2024/02/DD-Logo-2.png" 
                 alt="Dharanidhar University Logo" 
                 className="h-10 w-auto bg-white rounded-full p-1"
-                referrerPolicy="no-referrer"
               />
               <div className="flex flex-col">
                 <span className="font-bold text-lg leading-tight tracking-tight">Dharanidhar University</span>
-                <span className="text-xs font-medium text-indigo-200">BSc Hons Chemistry • Class of 2024</span>
+                <span className="text-xs font-medium text-indigo-200">BSc Hons Chemistry • Class of 2024-27</span>
               </div>
             </Link>
-            <div className="flex items-center">
+            <div className="flex items-center space-x-4">
+              {isDeveloper && (
+                <button
+                  onClick={toggleEditProfile}
+                  className={`flex items-center space-x-2 text-sm font-medium px-3 py-2 rounded-md transition-colors ${!isEditingDisabled ? 'bg-indigo-700' : 'bg-red-700'}`}
+                  title={!isEditingDisabled ? "Disable Edit Profile" : "Enable Edit Profile"}
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">{!isEditingDisabled ? "Edit Enabled" : "Edit Disabled"}</span>
+                </button>
+              )}
               {user ? (
                 <button 
                   onClick={logout}

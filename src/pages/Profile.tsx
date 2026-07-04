@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { students } from '../data';
-import { ArrowLeft, Edit2, X, Trash2, Mail, BookOpen, GraduationCap, Image as ImageIcon, Plus } from 'lucide-react';
+import { ArrowLeft, Edit2, X, Trash2, Mail, BookOpen, GraduationCap, Image as ImageIcon, Plus, Instagram, Ghost } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { db, auth } from '../firebase';
-import { collection, doc, onSnapshot, setDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { handleFirestoreError, OperationType } from '../utils/error';
+import { useSettings } from '../contexts/SettingsContext';
 import Cropper from 'react-easy-crop';
+import { DEVELOPER_EMAILS } from '../constants';
 
 interface Photo {
   id: string;
@@ -95,6 +94,14 @@ export default function Profile() {
   const navigate = useNavigate();
   const student = students.find((s) => s.id === Number(id));
   const { user } = useAuth();
+  const isDeveloper = DEVELOPER_EMAILS.includes(user?.email || '');
+  const { isEditingDisabled } = useSettings();
+
+  useEffect(() => {
+    if (isEditingDisabled) {
+      setIsEditing(false);
+    }
+  }, [isEditingDisabled]);
 
   const [images, setImages] = useState<Photo[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,59 +124,78 @@ export default function Profile() {
     bio: student?.bio || '',
     imageUrl: student?.imageUrl || '',
     graduationYear: student?.graduationYear || 2024,
+    instagram: (student as any)?.instagram || '',
+    snapchat: (student as any)?.snapchat || '',
+    tc: (student as any)?.tc || false,
+    ownerUid: '' as string | undefined,
   });
 
-  // Load profile data from Firestore
-  useEffect(() => {
-    if (!id || !user) return;
-    const unsubscribe = onSnapshot(doc(db, 'profiles', id), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setProfileData({
-          name: data.name,
-          username: data.username,
-          rollNumber: data.rollNumber,
-          bio: data.bio || '',
-          imageUrl: data.imageUrl || student?.imageUrl || '',
-          graduationYear: data.graduationYear || student?.graduationYear || 2024,
-        });
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `profiles/${id}`, auth);
-    });
-    return () => unsubscribe();
-  }, [id, student, user]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load photos from Firestore
+  // Load profile data from Firestore via backend caching API
   useEffect(() => {
-    if (!id || !user) {
-      // Fallback to dummy data if not logged in
-      if (student) {
-        setImages(Array.from({ length: 9 }, (_, i) => ({
-          id: `dummy-${i}`,
-          studentId: student.id,
-          imageUrl: `https://picsum.photos/seed/${student.username}_post${i}/400/400`,
-          createdAt: Date.now() - i * 1000,
-          ownerUid: 'dummy'
-        })));
+    if (!id) return;
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch(`/api/profiles/${id}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data) {
+            setProfileData({
+              name: data.name,
+              username: data.username,
+              rollNumber: data.rollNumber,
+              bio: data.bio || '',
+              imageUrl: data.imageUrl || student?.imageUrl || '',
+              graduationYear: data.graduationYear || student?.graduationYear || 2024,
+              instagram: data.instagram || '',
+              snapchat: data.snapchat || '',
+              tc: data.tc || false,
+              ownerUid: data.ownerUid,
+            });
+          }
+        }
+        setError(null);
+      } catch (err: any) {
+        setError('Failed to load profile. Please try again later.');
+        console.error("Error fetching profile:", err);
       }
-      return;
-    }
+    };
+    fetchProfile();
+  }, [id, student]);
 
-    const q = query(collection(db, 'photos'), where('studentId', '==', Number(id)));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedPhotos: Photo[] = [];
-      snapshot.forEach((doc) => {
-        loadedPhotos.push(doc.data() as Photo);
-      });
-      // Sort by createdAt descending
-      loadedPhotos.sort((a, b) => b.createdAt - a.createdAt);
-      setImages(loadedPhotos);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'photos', auth);
-    });
-    return () => unsubscribe();
-  }, [id, student, user]);
+  // Load photos from Firestore via backend caching API
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchPhotos = async () => {
+      try {
+        const response = await fetch(`/api/photos?studentId=${id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch photos');
+        }
+        const loadedPhotos: Photo[] = await response.json();
+        
+        // If no photos and we have a mock student, show mock photos
+        if (loadedPhotos.length === 0 && student) {
+          setImages(Array.from({ length: 9 }, (_, i) => ({
+            id: `dummy-${i}`,
+            studentId: student.id,
+            imageUrl: `https://picsum.photos/seed/${student.username}_post${i}/400/400`,
+            createdAt: Date.now() - i * 1000,
+            ownerUid: 'dummy'
+          })));
+        } else {
+          setImages(loadedPhotos);
+        }
+        setError(null);
+      } catch (err: any) {
+        setError('Failed to load photos. Please try again later.');
+        console.error("Error fetching photos:", err);
+      }
+    };
+    fetchPhotos();
+  }, [id, student]);
 
   if (!student) {
     return (
@@ -180,7 +206,29 @@ export default function Profile() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <button 
+          onClick={() => navigate(`/class/${profileData.graduationYear}`)} 
+          className="flex items-center text-slate-500 hover:text-indigo-600 transition-colors mb-6 font-medium"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Class of {profileData.graduationYear}{profileData.graduationYear === 2024 ? '-27' : ''}
+        </button>
+        <div className="text-center py-20 bg-white rounded-2xl border border-red-100 shadow-sm">
+          <h2 className="text-xl font-semibold text-red-600 mb-2">Access Denied</h2>
+          <p className="text-slate-600">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isEditingDisabled && !isDeveloper) {
+      alert("Editing is currently disabled.");
+      return;
+    }
     const file = e.target.files?.[0];
     if (file && user && id) {
       try {
@@ -193,11 +241,19 @@ export default function Profile() {
           createdAt: Date.now(),
           ownerUid: user.uid
         };
-        await setDoc(doc(db, 'photos', photoId), newPhoto);
+        const response = await fetch('/api/photos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPhoto)
+        });
+        if (response.ok) {
+          setImages(prev => [newPhoto, ...prev.filter(img => !img.id.startsWith('dummy'))]);
+        } else {
+          throw new Error('Photo upload failed on server');
+        }
       } catch (error) {
         console.error("Image upload error:", error);
         alert("Failed to upload image. Please try a different image.");
-        handleFirestoreError(error, OperationType.CREATE, `photos/${Date.now()}`, auth);
       }
     } else if (!user) {
       alert("Please sign in to upload photos.");
@@ -205,6 +261,10 @@ export default function Profile() {
   };
 
   const handleProfilePicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isEditingDisabled && !isDeveloper) {
+      alert("Editing is currently disabled.");
+      return;
+    }
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -226,6 +286,10 @@ export default function Profile() {
   }, []);
 
   const handleCropSave = async () => {
+    if (isEditingDisabled && !isDeveloper) {
+      alert("Editing is currently disabled.");
+      return;
+    }
     if (!cropImageSrc || !croppedAreaPixels) return;
     try {
       const croppedImageBase64 = await getCroppedImg(cropImageSrc, croppedAreaPixels, 400, 0.8);
@@ -239,44 +303,71 @@ export default function Profile() {
   };
 
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (isEditingDisabled && !isDeveloper) return;
     const { name, value } = e.target;
     setProfileData(prev => ({ ...prev, [name]: value }));
   };
 
   const saveProfile = async () => {
+    if (isEditingDisabled && !isDeveloper) {
+      alert("Editing is currently disabled.");
+      return;
+    }
     if (!user || !id) {
       alert("Please sign in to save your profile.");
       return;
     }
     try {
-      await setDoc(doc(db, 'profiles', id), {
-        id: Number(id),
-        name: profileData.name,
-        username: profileData.username,
-        rollNumber: profileData.rollNumber,
-        bio: profileData.bio,
-        imageUrl: profileData.imageUrl,
-        graduationYear: Number(profileData.graduationYear),
-        ownerUid: user.uid
+      const response = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: Number(id),
+          name: profileData.name,
+          username: profileData.username,
+          rollNumber: profileData.rollNumber,
+          bio: profileData.bio,
+          imageUrl: profileData.imageUrl,
+          graduationYear: Number(profileData.graduationYear),
+          instagram: profileData.instagram || '',
+          snapchat: profileData.snapchat || '',
+          tc: !!profileData.tc,
+          ownerUid: user.uid
+        })
       });
-      setIsEditing(false);
+      if (response.ok) {
+        setIsEditing(false);
+      } else {
+        throw new Error('Save profile failed on server');
+      }
     } catch (error) {
       console.error("Save error:", error);
       alert("Failed to save profile. Please ensure all fields are valid and the image is not too large.");
-      handleFirestoreError(error, OperationType.UPDATE, `profiles/${id}`, auth);
     }
   };
 
   const deletePhoto = async (photo: Photo) => {
+    if (isEditingDisabled && !isDeveloper) {
+      alert("Editing is currently disabled.");
+      return;
+    }
     if (!user) return;
-    if (photo.ownerUid !== user.uid) {
+    if (photo.ownerUid !== user.uid && !isDeveloper) {
       alert("You can only delete your own photos.");
       return;
     }
     try {
-      await deleteDoc(doc(db, 'photos', photo.id));
+      const response = await fetch(`/api/photos/${photo.id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setImages(prev => prev.filter(p => p.id !== photo.id));
+      } else {
+        throw new Error('Delete photo failed on server');
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `photos/${photo.id}`, auth);
+      console.error("Delete photo error:", error);
+      alert("Failed to delete photo.");
     }
   };
 
@@ -287,7 +378,7 @@ export default function Profile() {
         className="flex items-center text-slate-500 hover:text-indigo-600 transition-colors mb-6 font-medium"
       >
         <ArrowLeft className="w-4 h-4 mr-2" />
-        Back to Class of {profileData.graduationYear}
+        Back to Class of {profileData.graduationYear}{profileData.graduationYear === 2024 ? '-27' : ''}
       </button>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -295,7 +386,7 @@ export default function Profile() {
         <div className="h-32 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
         
         {/* Profile Content */}
-        <div className="px-6 sm:px-10 pb-10 relative">
+        <div className={`px-6 sm:px-10 pb-10 relative ${profileData.tc && !isEditing ? 'blur-sm select-none' : ''}`}>
           <div className="flex flex-col sm:flex-row sm:items-end -mt-16 sm:-mt-20 mb-6">
             <div className="relative group">
               <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-white overflow-hidden bg-white shadow-md">
@@ -330,7 +421,7 @@ export default function Profile() {
                   <p className="text-lg text-slate-500 font-medium">@{profileData.username}</p>
                 </div>
               )}
-              {!isEditing && (
+              {!isEditing && (!isEditingDisabled || isDeveloper) && (user?.uid === profileData.ownerUid || isDeveloper) && (
                 <button 
                   onClick={() => setIsEditing(true)} 
                   className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold py-2 px-4 rounded-lg text-sm transition-colors flex items-center"
@@ -385,6 +476,38 @@ export default function Profile() {
                     className="border border-slate-300 rounded-lg p-2.5 text-sm w-full focus:ring-2 focus:ring-indigo-500 outline-none" 
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Instagram</label>
+                  <input 
+                    type="text" 
+                    name="instagram" 
+                    value={profileData.instagram} 
+                    onChange={handleProfileChange} 
+                    className="border border-slate-300 rounded-lg p-2.5 text-sm w-full focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Snapchat</label>
+                  <input 
+                    type="text" 
+                    name="snapchat" 
+                    value={profileData.snapchat} 
+                    onChange={handleProfileChange} 
+                    className="border border-slate-300 rounded-lg p-2.5 text-sm w-full focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                {isDeveloper && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      name="tc"
+                      checked={profileData.tc}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, tc: e.target.checked }))}
+                      className="form-checkbox h-4 w-4 text-indigo-600 rounded"
+                    />
+                    <label className="text-sm font-medium text-slate-700">Mark as Transfer Certificate (TC)</label>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Bio / About</label>
@@ -442,13 +565,15 @@ export default function Profile() {
                         ref={fileInputRef}
                         onChange={handleImageUpload}
                       />
-                      <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors flex items-center"
-                      >
-                        <Plus className="w-4 h-4 mr-1" /> Add Photo
-                      </button>
-                      {images.length > 0 && (
+                      {!isEditingDisabled && (user?.uid === profileData.ownerUid || isDeveloper) && (
+                        <button 
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors flex items-center"
+                        >
+                          <Plus className="w-4 h-4 mr-1" /> Add Photo
+                        </button>
+                      )}
+                      {images.length > 0 && !isEditingDisabled && (user?.uid === profileData.ownerUid || isDeveloper) && (
                         <button 
                           onClick={() => setIsDeleting(!isDeleting)}
                           className={`text-sm font-medium transition-colors flex items-center ${isDeleting ? 'text-red-600' : 'text-slate-500 hover:text-slate-700'}`}
@@ -511,6 +636,27 @@ export default function Profile() {
                       <p className="text-xs text-slate-500 font-medium mb-1">Class Of</p>
                       <p className="text-slate-800 font-medium">{profileData.graduationYear}</p>
                     </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Socials</h3>
+                  <div className="space-y-4">
+                    {profileData.instagram && (
+                      <a href={profileData.instagram} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-indigo-600 hover:text-indigo-800">
+                        <Instagram size={20} />
+                        <span className="text-sm">Instagram</span>
+                      </a>
+                    )}
+                    {profileData.snapchat && (
+                      <a href={profileData.snapchat} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-indigo-600 hover:text-indigo-800">
+                        <Ghost size={20} />
+                        <span className="text-sm">Snapchat</span>
+                      </a>
+                    )}
+                    {!profileData.instagram && !profileData.snapchat && (
+                      <p className="text-sm text-slate-500">No social links added.</p>
+                    )}
                   </div>
                 </div>
               </div>

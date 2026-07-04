@@ -30,7 +30,7 @@ export const students: Student[] = Array.from({ length: 32 }, (_, i) => {
     username,
     name,
     role: 'BSc Hons Chemistry',
-    bio: 'BSc Hons Chemistry 🧪\nDharanidhar University 🎓\nClass of 2024 ✨',
+    bio: 'BSc Hons Chemistry 🧪\nDharanidhar University 🎓\nClass of 2024-27 ✨',
     imageUrl,
     graduationYear: 2024,
   };

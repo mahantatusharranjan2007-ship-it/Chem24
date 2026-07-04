@@ -9,19 +9,22 @@ import Profile from './pages/Profile';
 import ClassView from './pages/ClassView';
 import Layout from './components/Layout';
 import { AuthProvider } from './contexts/AuthContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="class/:year" element={<ClassView />} />
-            <Route path="student/:id" element={<Profile />} />
-          </Route>
-        </Routes>
-      </Router>
+      <SettingsProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route path="class/:year" element={<ClassView />} />
+              <Route path="student/:id" element={<Profile />} />
+            </Route>
+          </Routes>
+        </Router>
+      </SettingsProvider>
     </AuthProvider>
   );
 }

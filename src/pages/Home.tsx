@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { db, auth } from '../firebase';
-import { collection, onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { handleFirestoreError, OperationType } from '../utils/error';
 import { Plus, GraduationCap } from 'lucide-react';
 
 interface ClassGroup {
@@ -19,27 +16,28 @@ export default function Home() {
   const [classes, setClasses] = useState<ClassGroup[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newYear, setNewYear] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'classes'), (snapshot) => {
-      const loadedClasses: ClassGroup[] = [];
-      snapshot.forEach((doc) => {
-        loadedClasses.push(doc.data() as ClassGroup);
-      });
-      // Default classes if empty
-      if (loadedClasses.length === 0) {
+  const fetchClasses = async () => {
+    try {
+      const response = await fetch('/api/classes');
+      const data = await response.json();
+      if (data.length === 0) {
         setClasses([
-          { year: 2024, title: 'Class of 2024', createdAt: Date.now() },
+          { year: 2024, title: 'Class of 2024-27', createdAt: Date.now() },
           { year: 2025, title: 'Class of 2025', createdAt: Date.now() }
         ]);
       } else {
-        loadedClasses.sort((a, b) => b.year - a.year);
-        setClasses(loadedClasses);
+        setClasses(data);
       }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'classes', auth);
-    });
-    return () => unsubscribe();
+      setError(null);
+    } catch (err) {
+      setError('Failed to load classes. Please try again later.');
+    }
+  };
+
+  useEffect(() => {
+    fetchClasses();
   }, []);
 
   const handleAddClass = async (e: React.FormEvent) => {
@@ -53,15 +51,20 @@ export default function Home() {
     }
 
     try {
-      await setDoc(doc(db, 'classes', yearNum.toString()), {
-        year: yearNum,
-        title: `Class of ${yearNum}`,
-        createdAt: Date.now()
+      await fetch('/api/classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          year: yearNum,
+          title: `Class of ${yearNum}-27`,
+          createdAt: Date.now()
+        })
       });
       setIsAdding(false);
       setNewYear('');
+      fetchClasses();
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `classes/${yearNum}`, auth);
+      alert("Failed to create class.");
     }
   };
 
@@ -72,18 +75,17 @@ export default function Home() {
           src="https://dduniversity.ac.in/wp-content/uploads/2024/02/DD-Logo-2.png" 
           alt="Dharanidhar University Logo" 
           className="h-24 w-auto mb-6 drop-shadow-md"
-          referrerPolicy="no-referrer"
         />
-        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight sm:text-5xl mb-4">
+        <h1 className="font-display text-4xl font-extrabold text-slate-900 tracking-tight sm:text-5xl mb-4">
           Student Directory
         </h1>
-        <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+        <p className="font-sans text-xl text-slate-600 max-w-2xl mx-auto">
           Dharanidhar University, Keonjhar
         </p>
       </div>
 
       <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-bold text-slate-800">Graduating Classes</h2>
+        <h2 className="font-display text-2xl font-bold text-slate-800">Graduating Classes</h2>
         {user && (
           <button 
             onClick={() => setIsAdding(!isAdding)}
@@ -94,6 +96,12 @@ export default function Home() {
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-8 text-center">
+          <p className="font-medium">{error}</p>
+        </div>
+      )}
 
       {isAdding && user && (
         <motion.form 
@@ -143,7 +151,7 @@ export default function Home() {
               )}
               <div className="relative z-10 h-full flex flex-col justify-end p-8">
                 <h3 className={`text-3xl font-bold transition-colors mb-2 ${cls.imageUrl ? 'text-white' : 'text-slate-900 group-hover:text-indigo-600'}`}>
-                  {cls.title}
+                  {cls.title === 'Class of 2024' ? 'Class of 2024-27' : cls.title === 'Class of 2024-27' ? 'Class of 2024-27' : cls.title}
                 </h3>
                 <p className={`font-medium ${cls.imageUrl ? 'text-slate-200' : 'text-slate-500'}`}>
                   View Students &rarr;

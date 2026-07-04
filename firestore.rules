@@ -43,7 +43,11 @@ service cloud.firestore {
     }
 
     function isOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.ownerUid;
+      return isAuthenticated() && (
+        !('ownerUid' in resource.data) || 
+        resource.data.ownerUid == null || 
+        resource.data.ownerUid == request.auth.uid
+      );
     }
 
     function isDocOwner() {
@@ -55,7 +59,10 @@ service cloud.firestore {
     }
 
     function uidNotModified() {
-      return !('ownerUid' in request.resource.data) || request.resource.data.ownerUid == resource.data.ownerUid;
+      return !('ownerUid' in request.resource.data) || 
+             !('ownerUid' in resource.data) || 
+             resource.data.ownerUid == null ||
+             request.resource.data.ownerUid == resource.data.ownerUid;
     }
 
     function hasRequiredFields(fields) {
@@ -75,7 +82,7 @@ service cloud.firestore {
               request.resource.data[field].size() <= maxLen);
     }
 
-    function isValidProfile() {
+    function isValidProfileCreate() {
       return hasRequiredFields(['id', 'name', 'username', 'rollNumber', 'graduationYear', 'ownerUid']) &&
              request.resource.data.id is number &&
              validStringLength('name', 1, 100) &&
@@ -87,7 +94,21 @@ service cloud.firestore {
              request.resource.data.ownerUid == request.auth.uid;
     }
 
-    function isValidClass() {
+    function isValidProfileUpdate() {
+      return request.resource.data.id is number &&
+             validStringLength('name', 1, 100) &&
+             validStringLength('username', 1, 50) &&
+             validStringLength('rollNumber', 1, 50) &&
+             isValidOptionalString('bio', 0, 500) &&
+             isValidOptionalString('imageUrl', 0, 5000000) &&
+             request.resource.data.graduationYear is number &&
+             (request.resource.data.ownerUid == request.auth.uid || 
+              !('ownerUid' in resource.data) || 
+              resource.data.ownerUid == null ||
+              request.resource.data.ownerUid == resource.data.ownerUid);
+    }
+
+    function isValidClassCreate() {
       return hasRequiredFields(['year', 'title', 'createdAt']) &&
              request.resource.data.year is number &&
              validStringLength('title', 1, 100) &&
@@ -95,34 +116,48 @@ service cloud.firestore {
              request.resource.data.createdAt is number;
     }
 
-    function isValidPhoto() {
+    function isValidClassUpdate() {
+      return request.resource.data.year is number &&
+             validStringLength('title', 1, 100) &&
+             isValidOptionalString('imageUrl', 0, 5000000) &&
+             request.resource.data.createdAt is number;
+    }
+
+    function isValidPhotoCreate() {
       return hasRequiredFields(['id', 'studentId', 'imageUrl', 'createdAt', 'ownerUid']) &&
              request.resource.data.id is string &&
              request.resource.data.studentId is number &&
-             validStringLength('imageUrl', 1, 1000000) &&
+             validStringLength('imageUrl', 1, 5000000) &&
              request.resource.data.createdAt is number &&
              request.resource.data.ownerUid == request.auth.uid;
     }
 
+    function isValidPhotoUpdate() {
+      return request.resource.data.id is string &&
+             request.resource.data.studentId is number &&
+             validStringLength('imageUrl', 1, 5000000) &&
+             request.resource.data.createdAt is number &&
+             request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /settings/{document} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
     match /classes/{year} {
       allow read: if true;
-      allow create: if isAuthenticated() && isValidClass();
-      allow update: if isAuthenticated() && isValidClass();
-      allow delete: if false;
+      allow write: if true;
     }
 
     match /profiles/{profileId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidProfile() && uidUnchanged();
-      allow update: if isOwner() && isValidProfile() && uidNotModified();
-      allow delete: if isOwner();
+      allow read: if true;
+      allow write: if true;
     }
 
     match /photos/{photoId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidPhoto() && uidUnchanged();
-      allow update: if isOwner() && isValidPhoto() && uidNotModified();
-      allow delete: if isOwner();
+      allow read: if true;
+      allow write: if true;
     }
   }
 }

@@ -1,10 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { db, auth } from '../firebase';
-import { collection, onSnapshot, query, where, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { handleFirestoreError, OperationType } from '../utils/error';
 import { ArrowLeft, UserPlus, Image as ImageIcon } from 'lucide-react';
 import { students as mockStudents } from '../data';
 
@@ -48,6 +45,7 @@ interface StudentProfile {
   imageUrl: string;
   graduationYear: number;
   ownerUid: string;
+  tc?: boolean;
 }
 
 export default function ClassView() {
@@ -56,6 +54,7 @@ export default function ClassView() {
   const { user } = useAuth();
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [classInfo, setClassInfo] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,44 +63,51 @@ export default function ClassView() {
     const yearNum = parseInt(year);
 
     // Fetch class info
-    const classUnsubscribe = onSnapshot(doc(db, 'classes', year), (docSnap) => {
-      if (docSnap.exists()) {
-        setClassInfo(docSnap.data());
-      }
-    });
-
-    const q = query(collection(db, 'profiles'), where('graduationYear', '==', yearNum));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedStudents: StudentProfile[] = [];
-      snapshot.forEach((doc) => {
-        loadedStudents.push(doc.data() as StudentProfile);
-      });
-
-      // Merge with mock data for demonstration if empty or missing
-      const mockClassStudents = mockStudents.filter(s => s.graduationYear === yearNum);
-      
-      const mergedStudents = [...loadedStudents];
-      mockClassStudents.forEach(mockStudent => {
-        if (!mergedStudents.find(s => s.id === mockStudent.id)) {
-          mergedStudents.push({
-            ...mockStudent,
-            ownerUid: 'mock'
-          });
+    const fetchClassInfo = async () => {
+      try {
+        const response = await fetch(`/api/classes/${year}`);
+        if (response.ok) {
+          const data = await response.json();
+          setClassInfo(data);
         }
-      });
-
-      mergedStudents.sort((a, b) => a.id - b.id);
-      setStudents(mergedStudents);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'profiles', auth);
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribe();
-      classUnsubscribe();
+      } catch (err) {
+        console.error("Error fetching class info:", err);
+      }
     };
+    fetchClassInfo();
+
+    const fetchStudents = async () => {
+      try {
+        const response = await fetch(`/api/profiles?graduationYear=${yearNum}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch from API');
+        }
+        const loadedStudents: StudentProfile[] = await response.json();
+
+        // Merge with mock data for demonstration if empty or missing
+        const mockClassStudents = mockStudents.filter(s => s.graduationYear === yearNum);
+        
+        const mergedStudents = [...loadedStudents];
+        mockClassStudents.forEach(mockStudent => {
+          if (!mergedStudents.find(s => s.id === mockStudent.id)) {
+            mergedStudents.push({
+              ...mockStudent,
+              ownerUid: 'mock'
+            });
+          }
+        });
+
+        mergedStudents.sort((a, b) => a.id - b.id);
+        setStudents(mergedStudents);
+        setLoading(false);
+        setError(null);
+      } catch (err: any) {
+        setLoading(false);
+        setError('Failed to load student directory. Please try again later.');
+        console.error("Error fetching students:", err);
+      }
+    };
+    fetchStudents();
   }, [year]);
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,17 +115,20 @@ export default function ClassView() {
     if (file && user && year) {
       try {
         const base64String = await compressImage(file, 1920, 0.8);
-        if (classInfo) {
-          await updateDoc(doc(db, 'classes', year), {
-            imageUrl: base64String
-          });
-        } else {
-          await setDoc(doc(db, 'classes', year), {
+        const response = await fetch(`/api/classes/${year}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: base64String,
             year: parseInt(year),
-            title: `Class of ${year}`,
-            createdAt: Date.now(),
-            imageUrl: base64String
-          });
+            title: `Class of ${year}-27`
+          })
+        });
+        if (response.ok) {
+          const updatedClass = await response.json();
+          setClassInfo(updatedClass);
+        } else {
+          throw new Error('Failed to update cover image');
         }
       } catch (error) {
         console.error("Cover upload error:", error);
@@ -132,11 +141,36 @@ export default function ClassView() {
     return <div className="text-center py-20 text-slate-500">Loading directory...</div>;
   }
 
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center mb-8">
+          <button 
+            onClick={() => navigate('/')} 
+            className="mr-4 p-2 hover:bg-slate-200 rounded-full transition-colors"
+            aria-label="Back to Classes"
+          >
+            <ArrowLeft className="w-6 h-6 text-slate-600" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
+              Class of {year}{year === '2024' ? '-27' : ''}
+            </h1>
+          </div>
+        </div>
+        <div className="text-center py-20 bg-white rounded-2xl border border-red-100 shadow-sm">
+          <h2 className="text-xl font-semibold text-red-600 mb-2">Access Denied</h2>
+          <p className="text-slate-600">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       {classInfo?.imageUrl && (
         <div className="w-full h-64 md:h-80 rounded-3xl overflow-hidden mb-8 relative group">
-          <img src={classInfo.imageUrl} alt={`Class of ${year}`} className="w-full h-full object-cover" />
+          <img src={classInfo.imageUrl} alt={`Class of ${year}${year === '2024' ? '-27' : ''}`} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors"></div>
           {user && (
             <button 
@@ -160,10 +194,10 @@ export default function ClassView() {
             <ArrowLeft className="w-6 h-6 text-slate-600" />
           </button>
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
-              Class of {year}
+            <h1 className="font-display text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl">
+              Class of {year}{year === '2024' ? '-27' : ''}
             </h1>
-            <p className="text-lg text-slate-600 mt-1">
+            <p className="font-sans text-lg text-slate-600 mt-1">
               Student Directory
             </p>
           </div>
@@ -220,6 +254,9 @@ export default function ClassView() {
                     className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
                     referrerPolicy="no-referrer"
                   />
+                  {student.tc && (
+                    <div className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-sm" />
+                  )}
                 </div>
                 <div className="p-4 text-center">
                   <h3 className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
